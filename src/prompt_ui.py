@@ -24,58 +24,74 @@ def get_valid_input(prompt_msg):
     """사용자가 빈 값이나 공백만 입력하는 것을 방지하고 좌우 공백을 제거하여 반환합니다."""
     while True:
         val = input(prompt_msg).strip()
-        if val:
-            return val
+        if val: return val
         print("입력값이 없습니다. 공백 외의 값을 입력해주세요.")
 
-def run_submenu(title, options, actions):
-    """서브 메뉴의 반복되는 출력, 입력 처리 로직을 담당합니다."""
-    while True:
-        clear_screen() # 서브 메뉴를 그리기 전에 화면을 지웁니다
-        print(f"\n --- {title} ---")
-        print("==============")
-        for key, desc in options.items():
-            print(f"{key}. {desc}")
-        print("==============")
-        print("P. 이전 메뉴로 돌아가기")
-        
-        choice = get_valid_input("번호를 입력하세요: ").upper()
-        
-        if choice == 'P':
-            return # 메인 메뉴로 돌아감
-            
-        if choice in actions:
-            actions[choice]() # 연결된 함수 실행
-            pause_screen()    # 실행 결과를 볼 수 있게 대기
-        else:
-            print("잘못된 입력입니다. 정확한 번호를 선택해주세요.")
-            pause_screen()
-
 def get_multiline_input(prompt_msg):
-    """엔터 사용 가능합니다. 마지막 줄에  :q 를 누르세요"""
-    print(f"{prompt_msg} (엔터 사용 가능합니다. 마지막 줄에 ':q'를 입력하고 엔터를 누르세요)")
-    
+    """여러 줄의 입력을 받고, ':q'로 완료, ':c'로 취소를 처리합니다."""
+    print(f"{prompt_msg} (여러 줄 입력 가능. 완료: ':q', 취소: ':c' 입력 후 엔터)")
     lines = []
     while True:
         line = input()
-
         if line.strip() == ":c":
-            return None # 입력을 취소했다는 신호로 None을 반환 
-
-        # 종료 조건 확인
+            return None
         if line.strip() == ":q":
             if not lines or all(not l.strip() for l in lines):
-                print("입력값이 없습니다. 최소 한 줄 이상의 내용을 입력해주세요.")
-                lines = [] # 저장된 빈 줄 초기화
+                print("입력값이 없습니다. 최소 한 줄 이상의 내용을 입력해주세요. (취소하려면 ':c' 입력)")
+                lines = []
                 continue
             break
-            
         lines.append(line)
-        
     return "\n".join(lines)
 
+
 # ==========================================
-# 기능: 파일 저장 및 불러오기
+# [통합] 데이터 가공 및 화면 출력 로직
+# ==========================================
+def get_filtered_prompts(category=None, search_keyword=None, only_favorites=False, sort_by_views=False):
+    """조건에 맞는 데이터를 추려 정렬한 후 리스트로 반환합니다."""
+    filtered = prompts
+    if category: 
+        filtered = [p for p in filtered if p['category'] == category]
+    if search_keyword: 
+        filtered = [p for p in filtered if search_keyword.lower() in p['title'].lower() or search_keyword.lower() in p['content'].lower()]
+    if only_favorites: 
+        filtered = [p for p in filtered if p['is_favorite']]
+    if sort_by_views: 
+        filtered = sorted(filtered, key=lambda x: x['views'], reverse=True)
+    return filtered
+
+def print_prompt_list(target_list, title="프롬프트 목록"):
+    """넘겨받은 리스트를 일관된 형식으로 출력합니다."""
+    clear_screen()
+    print(f"\n--- {title} ---")
+    if not target_list:
+        print("조건에 맞는 프롬프트가 없습니다.")
+        return False
+    print("==========================================================")
+    for i, p in enumerate(target_list, 1):
+        fav = "⭐" if p["is_favorite"] else "☆"
+        print(f"{i:>2}. [{p['category']:^8}] {p['title']} {fav} (조회수: {p['views']})")
+    print("==========================================================")
+    return True
+
+def show_list_and_detail(data, title):
+    """리스트를 출력하고, 번호를 선택해 상세 조회를 할 수 있도록 연결합니다."""
+    if print_prompt_list(data, title):
+        idx_str = get_valid_input("상세조회할 번호 입력 (P: 돌아가기): ").upper()
+        if idx_str != 'P':
+            try:
+                idx = int(idx_str) - 1
+                if 0 <= idx < len(data):
+                    detail_prompt(data[idx])
+                else:
+                    print("잘못된 번호입니다.")
+            except ValueError:
+                print("숫자를 입력해주세요.")
+
+
+# ==========================================
+# 기능: 파일 저장, 불러오기, 내보내기
 # ==========================================
 def save_prompts():
     print("\n--- 프롬프트 저장 ---")
@@ -83,25 +99,19 @@ def save_prompts():
         os.makedirs(DATA_DIR)
         print(f"'{DATA_DIR}' 디렉토리를 생성했습니다.")
 
-    # 파일명 입력을 위한 전용 루프
     while True:
         filename = input("저장할 파일명을 입력하세요 (예: data.json): ").strip()
-        
-        # 엔터나 공백만 입력했을 경우
         if not filename:
             cancel = input("파일명이 입력되지 않았습니다. 저장을 취소하시겠습니까? (y/n): ").strip().upper()
             if cancel == 'Y':
                 print("저장을 취소합니다.")
-                return # 함수를 종료하여 상위 메뉴로 돌아감
+                return
             else:
                 print("다시 파일명을 입력해주세요.\n")
-                continue # 루프의 처음(파일명 입력)으로 돌아감
-                
-        # 정상적으로 파일명이 입력되었을 경우 루프 탈출
+                continue
         break
 
     filepath = os.path.join(DATA_DIR, filename)
-
     if os.path.exists(filepath):
         overwrite = get_valid_input("파일이 이미 존재합니다. 덮어쓰시겠습니까? (y/n): ").upper()
         if overwrite != 'Y':
@@ -153,38 +163,28 @@ def load_prompts():
     except Exception as e:
         print(f"오류가 발생했습니다: {e}")
 
-# ============================================
-# 마크다운 형식으로 파일 내보내기
-# ============================================
 def export_to_markdown():
     print("\n--- 마크다운으로 내보내기 ---")
     if not prompts:
         print("내보낼 데이터가 없습니다.")
         return
 
-    # 1. 디렉토리 준비
     EXPORT_DIR = "export"
     if not os.path.exists(EXPORT_DIR):
         os.makedirs(EXPORT_DIR)
 
-    # 2. 파일명 입력 루프
     while True:
         filename = get_valid_input("내보낼 파일명을 입력하세요 (확장자 .md 포함 권장): ")
-        
-        # 파일명 입력 취소 처리 (get_valid_input은 빈값을 허용 안하므로 
-        # 취소하려면 별도 로직이 필요하거나 위에서 만든 :c 로직 활용)
         if filename.lower() == ":c":
             print("내보내기를 취소합니다.")
             return
 
         filepath = os.path.join(EXPORT_DIR, filename)
 
-        # 3. 중복 확인
         if os.path.exists(filepath):
             print(f"오류: '{filename}' 파일이 이미 존재합니다. 다른 이름을 입력해주세요.")
-            continue # 다시 파일명 입력 루프로
+            continue
         
-        # 4. 파일 생성 (Markdown 형식으로 작성)
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write("# 프롬프트 목록\n\n")
@@ -201,85 +201,84 @@ def export_to_markdown():
             print(f"내보내기 중 오류가 발생했습니다: {e}")
             break
 
+
 # ==========================================
-# 기능: 프롬프트 추가 및 목록 보기
+# 기능: 프롬프트 추가 및 상세 조회
 # ==========================================
 def add_prompt():
     print("\n--- 프롬프트 추가하기 ---")
     title = get_valid_input("제목: ")
-    if title == ":c":
-        print("프롬프트 추가를 취소합니다")
-        return
-
+    if title == ":c": return
     content = get_multiline_input("\n내용:")
-    if content is None:
-        print("프롬프트 추가를 취소합니다")
-        return
-    
+    if content is None: return
     category = get_valid_input("\n카테고리: ")
-    if category == ":c":
-        print("프롬프트 추가를 취소합니다")
-        return
+    if category == ":c": return
     
-    new_prompt = {
-        "title": title,
-        "content": content,
-        "category": category,
-        "is_favorite": False,
-        "views": 0
-    }
-    prompts.append(new_prompt)
-    print("\n프롬프트가 성공적으로 추가되었습니다.")
+    prompts.append({"title": title, "content": content, "category": category, "is_favorite": False, "views": 0})
+    print("\n프롬프트가 추가되었습니다.")
 
-def list_prompts(sort_by_views=False):
-    """
-    sort_by_views가 True이면 조회수 내림차순(desc)으로 정렬하여 출력합니다.
-    """
-    clear_screen()
-    print("\n--- 프롬프트 리스트 ---")
-    
-    # 데이터가 없을 때 처리
-    if not prompts:
-        print("등록된 프롬프트가 없습니다.")
-        return
+def detail_prompt(prompt_obj):
+    prompt_obj['views'] += 1
+    print(f"\n--- {prompt_obj['title']} ---")
+    print(f"카테고리: {prompt_obj['category']}\n내용:\n{prompt_obj['content']}")
+    print("-" * 20)
+    choice = get_valid_input("1. 수정 | 2. 삭제 | 3. 즐겨찾기 토글 | P. 돌아가기: ").upper()
+    if choice == '1':
+        prompt_obj['title'] = get_valid_input("새 제목: ")
+        prompt_obj['content'] = get_multiline_input("새 내용:")
+    elif choice == '2':
+        prompts.remove(prompt_obj)
+        print("삭제되었습니다.")
+    elif choice == '3':
+        prompt_obj['is_favorite'] = not prompt_obj['is_favorite']
+        print(f"즐겨찾기 상태가 변경되었습니다. (현재: {'⭐ ON' if prompt_obj['is_favorite'] else '☆ OFF'})")
+    return
 
-    # 정렬 로직: 조회수(views) 기준으로 내림차순 정렬
-    display_list = prompts
-    if sort_by_views:
-        display_list = sorted(prompts, key=lambda x: x['views'], reverse=True)
-        print("(조회수 순위 정렬 적용)")
-    
-    print("==========================================================")
-    for i, p in enumerate(display_list, 1):
-        fav = "⭐" if p["is_favorite"] else "☆"
-        print(f"{i:>2}. [{p['category']:^8}] {p['title']}  {fav} (조회수: {p['views']})")
-    
-    print("==========================================================")
-    print("\nP. 메인 메뉴로 돌아가기")
+
 # ==========================================
-# 서브 메뉴 모음
+# 서브 메뉴 핸들러 및 메뉴 구성
 # ==========================================
+def run_submenu(title, options, actions):
+    while True:
+        clear_screen()
+        print(f"\n --- {title} ---")
+        for key, desc in options.items(): print(f"{key}. {desc}")
+        print("P. 이전 메뉴로 돌아가기")
+        choice = get_valid_input("번호를 입력하세요: ").upper()
+        if choice == 'P': return
+        if choice in actions:
+            actions[choice]()
+            pause_screen()
+        else:
+            print("잘못된 입력입니다. 정확한 번호를 선택해주세요.")
+            pause_screen()
+
 def manage_prompt_menu():
     options = {
-        "1": "추가하기",
-        "2": "리스트 보기",
-        "3": "조회 수 순위로 리스트 보기"
+        "1": "추가하기", 
+        "2": "리스트 보기", 
+        "3": "조회수 순위 보기",
+        "4": "프롬프트 검색"
     }
     actions = {
-        "1": add_prompt,
-        "2": list_prompts,
-        "3": lambda: list_prompts(sort_by_views=True)
+        "1": add_prompt, 
+        "2": lambda: show_list_and_detail(get_filtered_prompts(), "전체 프롬프트 리스트"), 
+        "3": lambda: show_list_and_detail(get_filtered_prompts(sort_by_views=True), "인기순 프롬프트 리스트"),
+        "4": lambda: show_list_and_detail(get_filtered_prompts(search_keyword=get_valid_input("검색어: ")), "검색 결과")
     }
     run_submenu("1. 프롬프트 관리하기", options, actions)
 
 def manage_category_menu():
-    options = {"1": "리스트 보기"}
-    actions = {"1": lambda: print("카테고리 리스트 (추후 구현 예정)")}
+    # 현재 데이터에 존재하는 카테고리만 중복 없이 추출하여 동적 메뉴 생성
+    categories = list(set(p['category'] for p in prompts))
+    options = {str(i+1): cat for i, cat in enumerate(categories)}
+    actions = {str(i+1): lambda c=cat: show_list_and_detail(get_filtered_prompts(category=c), f"카테고리: {c}") 
+               for i, cat in enumerate(categories)}
     run_submenu("2. 카테고리별 보기", options, actions)
 
 def manage_favorite_menu():
     options = {"1": "즐겨찾기 목록 보기"}
-    actions = {"1": lambda: print("즐겨찾기 목록 (추후 구현 예정)")}
+    actions = {"1": lambda: show_list_and_detail(get_filtered_prompts(only_favorites=True), "즐겨찾기 목록")}
     run_submenu("3. 즐겨찾기 관리", options, actions)
 
 
@@ -301,38 +300,28 @@ def show_main_menu():
 
 def main():
     while True:
-        clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
+        clear_screen()
         show_main_menu()
-        
         choice = get_valid_input("번호를 입력하세요: ").upper()
         
         match choice:
-            case "1": 
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
-                manage_prompt_menu()
-            case "2": 
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
-                manage_category_menu()
-            case "3": 
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
-                manage_favorite_menu()
+            case "1": manage_prompt_menu()
+            case "2": manage_category_menu()
+            case "3": show_list_and_detail(get_filtered_prompts(only_favorites=True), "즐겨찾기 목록")
             case "S": 
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
                 save_prompts()
-                pause_screen() # 결과 확인용 대기
+                pause_screen()
             case "L": 
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
                 load_prompts()
-                pause_screen() # 결과 확인용 대기
+                pause_screen()
             case "E": 
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
                 export_to_markdown()
                 pause_screen()
-            case "0":
-                clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
+            case "0": 
+                clear_screen()
                 print("프로그램을 종료합니다.")
                 break
-            case _:
+            case _: 
                 print("잘못된 입력입니다. 다시 선택해주세요.")
                 pause_screen()
 
