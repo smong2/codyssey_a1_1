@@ -153,6 +153,53 @@ def load_prompts():
     except Exception as e:
         print(f"오류가 발생했습니다: {e}")
 
+# ============================================
+# 마크다운 형식으로 파일 내보내기
+# ============================================
+def export_to_markdown():
+    print("\n--- 마크다운으로 내보내기 ---")
+    if not prompts:
+        print("내보낼 데이터가 없습니다.")
+        return
+
+    # 1. 디렉토리 준비
+    EXPORT_DIR = "export"
+    if not os.path.exists(EXPORT_DIR):
+        os.makedirs(EXPORT_DIR)
+
+    # 2. 파일명 입력 루프
+    while True:
+        filename = get_valid_input("내보낼 파일명을 입력하세요 (확장자 .md 포함 권장): ")
+        
+        # 파일명 입력 취소 처리 (get_valid_input은 빈값을 허용 안하므로 
+        # 취소하려면 별도 로직이 필요하거나 위에서 만든 :c 로직 활용)
+        if filename.lower() == ":c":
+            print("내보내기를 취소합니다.")
+            return
+
+        filepath = os.path.join(EXPORT_DIR, filename)
+
+        # 3. 중복 확인
+        if os.path.exists(filepath):
+            print(f"오류: '{filename}' 파일이 이미 존재합니다. 다른 이름을 입력해주세요.")
+            continue # 다시 파일명 입력 루프로
+        
+        # 4. 파일 생성 (Markdown 형식으로 작성)
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write("# 프롬프트 목록\n\n")
+                for p in prompts:
+                    fav = "⭐" if p["is_favorite"] else "☆"
+                    f.write(f"## {p['title']} {fav}\n")
+                    f.write(f"- **카테고리**: {p['category']}\n")
+                    f.write(f"- **조회수**: {p['views']}\n\n")
+                    f.write(f"### 내용\n{p['content']}\n\n")
+                    f.write("---\n")
+            print(f"성공적으로 {filepath} 파일로 내보냈습니다.")
+            break
+        except Exception as e:
+            print(f"내보내기 중 오류가 발생했습니다: {e}")
+            break
 
 # ==========================================
 # 기능: 프롬프트 추가 및 목록 보기
@@ -265,7 +312,7 @@ def main():
                 pause_screen() # 결과 확인용 대기
             case "E": 
                 clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
-                print("Markdown 내보내기 기능 (추후 구현 예정)")
+                export_to_markdown()
                 pause_screen()
             case "0":
                 clear_screen() # 메인 메뉴를 그리기 전에 화면 지우기
