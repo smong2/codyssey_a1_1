@@ -4,9 +4,9 @@ import json
 DATA_DIR = "data"
 
 prompts = [
-    {"title": "이미지 생성", "content": "풍경화를 그려줘", "category": "이미지 생성", "is_favorite": False, "views": 0},
-    {"title": "페르소나", "content": "너는 전문 개발자야", "category": "페르소나", "is_favorite": True, "views": 5},
-    {"title": "코드 자동화", "content": "파이썬으로 웹 크롤러를 짜줘", "category": "자동화", "is_favorite": False, "views": 2}
+    {"title": "이미지 생성", "content": "풍경화를 그려줘", "category": "Image", "is_favorite": False, "views": 0},
+    {"title": "페르소나", "content": "너는 전문 개발자야", "category": "Persona", "is_favorite": True, "views": 5},
+    {"title": "코드 자동화", "content": "파이썬으로 웹 크롤러를 짜줘", "category": "automation", "is_favorite": False, "views": 2}
 ]
 
 # ==========================================
@@ -231,17 +231,31 @@ def add_prompt():
     prompts.append(new_prompt)
     print("\n프롬프트가 성공적으로 추가되었습니다.")
 
-def list_prompts():
-    print("\n--- 전체 프롬프트 리스트 ---")
+def list_prompts(sort_by_views=False):
+    """
+    sort_by_views가 True이면 조회수 내림차순(desc)으로 정렬하여 출력합니다.
+    """
+    clear_screen()
+    print("\n--- 프롬프트 리스트 ---")
+    
+    # 데이터가 없을 때 처리
     if not prompts:
         print("등록된 프롬프트가 없습니다.")
         return
+
+    # 정렬 로직: 조회수(views) 기준으로 내림차순 정렬
+    display_list = prompts
+    if sort_by_views:
+        display_list = sorted(prompts, key=lambda x: x['views'], reverse=True)
+        print("(조회수 순위 정렬 적용)")
     
-    for i, p in enumerate(prompts, 1):
+    print("==========================================================")
+    for i, p in enumerate(display_list, 1):
         fav = "⭐" if p["is_favorite"] else "☆"
-        print(f"{i}. [{p['category']}] {p['title']} {fav} (조회수: {p['views']})")
-
-
+        print(f"{i:>2}. [{p['category']:^8}] {p['title']}  {fav} (조회수: {p['views']})")
+    
+    print("==========================================================")
+    print("\nP. 메인 메뉴로 돌아가기")
 # ==========================================
 # 서브 메뉴 모음
 # ==========================================
@@ -254,7 +268,7 @@ def manage_prompt_menu():
     actions = {
         "1": add_prompt,
         "2": list_prompts,
-        "3": lambda: print("조회수 정렬 리스트 (추후 구현 예정)")
+        "3": lambda: list_prompts(sort_by_views=True)
     }
     run_submenu("1. 프롬프트 관리하기", options, actions)
 
