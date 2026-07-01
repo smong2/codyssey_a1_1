@@ -1,0 +1,23 @@
+[
+    {
+        "title": "이미지 생성",
+        "content": "풍경화를 그려줘",
+        "category": "이미지 생성",
+        "is_favorite": false,
+        "views": 0
+    },
+    {
+        "title": "페르소나",
+        "content": "너는 전문 개발자야",
+        "category": "페르소나",
+        "is_favorite": true,
+        "views": 0
+    },
+    {
+        "title": "코드 자동화",
+        "content": "파이썬으로 웹 크롤러를 짜줘",
+        "category": "자동화",
+        "is_favorite": false,
+        "views": 2
+    }
+]

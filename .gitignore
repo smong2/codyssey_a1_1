@@ -1,5 +1,6 @@
 # just for test
 .test_codyssey
+settings.json 
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
