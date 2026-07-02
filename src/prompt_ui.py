@@ -167,7 +167,7 @@ def load_prompts():
         print("  [알림] 데이터 폴더가 존재하지 않습니다.")
         return
 
-    files = [f for f in os.listdir(DATA_DIR) if f.endswith('.json')]
+    files = [f for f in os.listdir(DATA_DIR) ]
     if not files:
         print("  [알림] 불러올 파일이 없습니다.")
         return
@@ -325,7 +325,7 @@ def detail_prompt(prompt_obj):
         elif choice == 'P':
             return 
         else:
-            print("  [오류] 잘못된 명령어입니다.")
+            print("  [오류] 올바른 번호를 입력해주세요")
 
 
 # ==========================================
@@ -346,7 +346,7 @@ def run_submenu(title, options, actions):
         if choice in actions:
             actions[choice]()
         else:
-            print("  [오류] 알 수 없는 명령어입니다.")
+            print("  [오류] 올바른 번호를 입력해주세요")
             pause_screen()
 
 def manage_prompt_menu():
@@ -397,7 +397,7 @@ def show_main_menu():
     print("    L. 데이터 불러오기")
     print("    E. 외부로 내보내기 (Markdown)")
     print("-" * 50)
-    print("    0. 통신 종료")
+    print("    0. 종료")
     print("=" * 50)
 
 def main():
@@ -424,7 +424,7 @@ def main():
                 print("\n  [시스템] 통신을 종료합니다. 안녕히 가십시오.\n")
                 break
             case _: 
-                print("  [오류] 알 수 없는 명령어입니다.")
+                print("  [오류] 올바른 번호를 입력해주세요.")
                 pause_screen()
 
 if __name__ == "__main__":
