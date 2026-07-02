@@ -8,6 +8,10 @@
 
 AI 모델(ChatGPT, Claude, Gemini 등)에게 지시할 '프롬프트'를 터미널 환경에서 쉽고 체계적으로 관리할 수 있는 레트로 감성(PC 통신 스타일)의 CLI 콘솔 프로그램입니다.
 
+## 함수 설명
+
+[함수 리스트](./documents/2.function_list.md)
+
 ## 🛠️ 실행 방법
 
 1. Python 3.10 이상 환경이 필요합니다. (또는 제공된 Docker 환경 사용)
