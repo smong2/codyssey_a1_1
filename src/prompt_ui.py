@@ -1,5 +1,19 @@
 import os
 import json
+import sys
+import atexit
+
+# ==========================================
+# 색상 테마 및 초기화 설정 (macOS 최적화)
+# ==========================================
+THEME = "\033[1;97;44m"  # 굵고 밝은 흰색 텍스트 + 파란색 배경
+RESET = "\033[0m"
+
+# 프로그램 시작 시 터미널 전체에 색상 적용
+sys.stdout.write(THEME)
+
+# 프로그램 종료 시 터미널 잔상 방지용 초기화
+atexit.register(lambda: sys.stdout.write(RESET))
 
 DATA_DIR = "data"
 
@@ -10,10 +24,88 @@ prompts = [
 ]
 
 # ==========================================
-# 화면 제어 및 공통 유틸리티 함수 (PC통신 감성)
+# 한글 백스페이스 잔상 방지 커스텀 입력 (macOS/Linux)
+# ==========================================
+def get_display_width(text):
+    try:
+        return len(str(text).encode('euc-kr'))
+    except UnicodeEncodeError:
+        return len(str(text)) * 2
+
+def custom_input(prompt_msg=""):
+    if prompt_msg:
+        sys.stdout.write(prompt_msg)
+        sys.stdout.flush()
+        
+    # 윈도우 환경이거나 터미널 세션이 아닐 경우 기본 input 사용
+    if os.name == 'nt' or not sys.stdin.isatty():
+        return __builtins__.input(prompt_msg)
+        
+    import termios
+    import tty
+    
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    chars = []
+    
+    try:
+        tty.setraw(fd)
+        while True:
+            byte_data = bytearray()
+            while True:
+                b = os.read(fd, 1)
+                if not b:
+                    break
+                byte_data.extend(b)
+                try:
+                    char = byte_data.decode('utf-8')
+                    break
+                except UnicodeDecodeError:
+                    if len(byte_data) >= 4:
+                        char = byte_data.decode('utf-8', errors='ignore')
+                        break
+                    continue
+            
+            if not char:
+                continue
+            
+            # 엔터 입력 시 종료
+            if char in ('\r', '\n'):
+                sys.stdout.write('\r\n')
+                sys.stdout.flush()
+                return "".join(chars)
+            
+            # 백스페이스 입력 시 한글(2칸) 및 영문(1칸) 크기에 맞춰 깔끔하게 지우기
+            elif char in ('\x7f', '\b'):
+                if chars:
+                    removed = chars.pop()
+                    width = 2 if get_display_width(removed) > 1 else 1
+                    sys.stdout.write('\b' * width + ' ' * width + '\b' * width)
+                    sys.stdout.flush()
+            
+            # Ctrl+C 처리
+            elif char == '\x03':
+                raise KeyboardInterrupt
+                
+            # 일반 문자 입력
+            else:
+                chars.append(char)
+                sys.stdout.write(char)
+                sys.stdout.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+# 기본 input 함수를 백스페이스 잔상이 해결된 커스텀 입력으로 대체
+input = custom_input
+
+# ==========================================
+# 화면 제어 및 공통 유틸리티 함수
 # ==========================================
 def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+    # \033[2J : 전체 화면 지우기 (파란 배경 유지)
+    # \033[H  : 커서를 좌측 상단(1,1)으로 이동
+    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.write(THEME)
 
 def pause_screen():
     input("\n[안내] 아무 키나 누르시면 이전 화면으로 돌아갑니다...")
@@ -24,38 +116,41 @@ def get_valid_input(prompt_msg):
         if val: return val
         print("  [오류] 입력값이 없습니다. 다시 입력해 주십시오.")
 
-def get_multiline_input(prompt_msg):
+def get_multiline_input(prompt_msg, is_edit_mode=False):
     print(f"{prompt_msg}")
-    print("  (입력 완료: 빈 줄에서 ':q' 입력 / 입력 취소: ':c' 입력)")
+    if is_edit_mode:
+        print("  (입력 완료: 빈 줄에서 ':q' / 취소: ':c' / 내용유지: 첫 줄에서 엔터)")
+    else:
+        print("  (입력 완료: 빈 줄에서 ':q' / 취소: ':c')")
     print("-" * 65)
+    
     lines = []
+    is_first_line = True
+    
     while True:
         line = input("  > ")
-        if line.strip() == ":c":
+        
+        if is_first_line and is_edit_mode and line == "":
             return None
+            
+        is_first_line = False
+        
+        if line.strip() == ":c":
+            return ":c"
+            
         if line.strip() == ":q":
             if not lines or all(not l.strip() for l in lines):
                 print("  [오류] 내용이 비어있습니다. (취소하시려면 ':c'를 입력하세요)")
                 lines = []
+                is_first_line = True
                 continue
             break
+            
         lines.append(line)
+        
     return "\n".join(lines)
 
-
-# ==========================================
-# [개선] 한글/영문 혼용 시 터미널 정렬 (EUC-KR 방식)
-# ==========================================
-def get_display_width(text):
-    """문자열을 EUC-KR로 인코딩했을 때의 바이트 길이(한글 2, 영문 1)를 반환합니다."""
-    try:
-        return len(str(text).encode('euc-kr'))
-    except UnicodeEncodeError:
-        # EUC-KR로 표현 불가능한 특수문자(이모지 등)는 기본 2칸으로 계산
-        return len(str(text)) * 2
-
 def pad_string(text, total_width, align='<'):
-    """터미널 출력 너비에 맞춰 공백을 채웁니다."""
     text = str(text)
     width = get_display_width(text)
     padding = total_width - width
@@ -73,7 +168,7 @@ def pad_string(text, total_width, align='<'):
 
 
 # ==========================================
-# 데이터 가공 및 리스트 출력 로직 (BBS 스타일)
+# 데이터 가공 및 리스트 출력 로직
 # ==========================================
 def get_filtered_prompts(category=None, search_keyword=None, only_favorites=False, sort_by_views=False):
     filtered = prompts
@@ -99,7 +194,7 @@ def print_prompt_list(target_list, title="프롬프트 목록"):
     print(f"  {'NO':^4} | {'카테고리':^14} | {'프롬프트 제목':^20} | {'조회':^4} | {'즐겨찾기'}")
     print("-" * 70)
     for i, p in enumerate(target_list, 1):
-        fav = "★" if p["is_favorite"] else "☆"
+        fav = "⭐" if p["is_favorite"] else "[ ]"
         cat_str = pad_string(p['category'], 14, '^')
         title_str = pad_string(p['title'], 20, '<')
         views_str = pad_string(str(p['views']), 4, '^')
@@ -133,6 +228,54 @@ def show_list_and_detail(fetch_func, title):
 
 
 # ==========================================
+# 카테고리 선택 및 입력 공통 함수
+# ==========================================
+def select_category(is_edit_mode=False):
+    print("\n  [카테고리 지정]")
+    categories = list(set(p['category'] for p in prompts))
+    
+    print("-" * 65)
+    for i, cat in enumerate(categories, 1):
+        print(f"    {i}. {cat}")
+    print(f"    0. 직접 입력하기 (새로운 카테고리)")
+    print("-" * 65)
+    
+    prompt_str = "  목록 번호 선택 또는 직접 입력 (취소: :c, 내용유지: 엔터) > " if is_edit_mode else "  목록 번호 선택 또는 직접 입력 (취소: :c) > "
+    
+    while True:
+        cat_choice = input(prompt_str).strip()
+        
+        if is_edit_mode and not cat_choice:
+            return None 
+            
+        if not cat_choice:
+            print("  [오류] 입력값이 없습니다. 다시 입력해 주십시오.")
+            continue
+            
+        if cat_choice == ":c": 
+            return ":c"
+        
+        if cat_choice == '0':
+            while True:
+                category = input("  새 카테고리명 입력 (취소: :c) > ").strip()
+                if not category:
+                    print("  [오류] 입력값이 없습니다.")
+                    continue
+                break
+            if category == ":c": 
+                return ":c"
+            return category
+            
+        if cat_choice.isdigit() and 1 <= int(cat_choice) <= len(categories):
+            return categories[int(cat_choice) - 1]
+            
+        if not cat_choice.isdigit():
+            return cat_choice
+            
+        print("  [오류] 올바른 번호나 카테고리명을 입력해 주십시오.")
+
+
+# ==========================================
 # 기능: 파일 저장, 불러오기, 내보내기
 # ==========================================
 def save_prompts():
@@ -142,10 +285,15 @@ def save_prompts():
     if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
 
     while True:
-        filename = input("  저장할 파일명 입력 (예: data.json) : ").strip()
+        filename = input("  저장할 파일명 입력 (예: data) (취소: :c) > ").strip()
+        if filename == ":c": return
         if not filename:
-            if input("  [확인] 입력을 취소하시겠습니까? (Y/N): ").strip().upper() == 'Y': return
+            print("  [오류] 입력값이 없습니다.")
             continue
+            
+        # .json 확장자 자동 추가
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
         break
 
     filepath = os.path.join(DATA_DIR, filename)
@@ -167,9 +315,9 @@ def load_prompts():
         print("  [알림] 데이터 폴더가 존재하지 않습니다.")
         return
 
-    files = [f for f in os.listdir(DATA_DIR) ]
+    files = [f for f in os.listdir(DATA_DIR) if f.endswith(".json")]
     if not files:
-        print("  [알림] 불러올 파일이 없습니다.")
+        print("  [알림] 불러올 JSON 파일이 없습니다.")
         return
 
     for i, file in enumerate(files, 1): 
@@ -201,8 +349,14 @@ def export_to_markdown():
     if not os.path.exists(EXPORT_DIR): os.makedirs(EXPORT_DIR)
 
     while True:
-        filename = get_valid_input("  내보낼 파일명 입력 (.md 포함 권장 / :c 취소) > ")
+        filename = input("  내보낼 파일명 입력 (취소: :c) > ").strip()
+        if not filename:
+            print("  [오류] 입력값이 없습니다.")
+            continue
         if filename.lower() == ":c": return
+
+        if not filename.lower().endswith(".md"):
+            filename += ".md"
 
         filepath = os.path.join(EXPORT_DIR, filename)
         if os.path.exists(filepath):
@@ -212,8 +366,6 @@ def export_to_markdown():
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write("# 📋 통합 프롬프트 목록\n\n")
-                
-                # 카테고리별로 그룹핑하여 출력
                 categories = sorted(list(set(p['category'] for p in prompts)))
                 
                 for cat in categories:
@@ -227,7 +379,7 @@ def export_to_markdown():
                         f.write(f"**[프롬프트 내용]**\n```text\n{p['content']}\n```\n\n")
                     f.write("---\n\n")
                     
-            print(f"\n  [알림] '{filepath}' 카테고리별 분류 생성 완료.")
+            print(f"\n  [알림] '{filepath}' 로 생성 완료되었습니다.")
             break
         except Exception as e:
             print(f"  [시스템 오류] {e}")
@@ -235,7 +387,7 @@ def export_to_markdown():
 
 
 # ==========================================
-# 기능: 프롬프트 추가 (카테고리 선택 기능 포함) 및 상세
+# 기능: 프롬프트 추가 및 상세/수정
 # ==========================================
 def add_prompt():
     clear_screen()
@@ -243,43 +395,14 @@ def add_prompt():
     print(pad_string("[[ 신규 프롬프트 등록 ]]", 65, '^'))
     print("=" * 65)
     
-    title = get_valid_input("  [입력] 제목 (:c 취소) > ")
-    if title == ":c": return
+    title = input("  [입력] 제목 (취소: :c) > ").strip()
+    if title == ":c" or not title: return
     
     content = get_multiline_input("\n  [입력] 내용")
-    if content is None: return
+    if content == ":c" or content is None: return
     
-    # 카테고리 선택 또는 직접 입력
-    print("\n  [입력] 카테고리 지정")
-    categories = list(set(p['category'] for p in prompts))
-    
-    print("-" * 65)
-    for i, cat in enumerate(categories, 1):
-        print(f"    {i}. {cat}")
-    print(f"    0. 직접 입력하기 (새로운 카테고리)")
-    print("-" * 65)
-    
-    while True:
-        cat_choice = get_valid_input("  목록 번호 선택 또는 직접 입력 (:c 취소) > ")
-        if cat_choice == ":c": return
-        
-        # 1. 0번 선택 시: 직접 입력 모드
-        if cat_choice == '0':
-            category = get_valid_input("  새 카테고리명 입력 > ")
-            if category == ":c": return
-            break
-            
-        # 2. 리스트의 번호를 선택한 경우
-        if cat_choice.isdigit() and 1 <= int(cat_choice) <= len(categories):
-            category = categories[int(cat_choice) - 1]
-            break
-            
-        # 3. 숫자가 아닌 문자열을 바로 입력한 경우 (빠른 직접 입력 허용)
-        if not cat_choice.isdigit():
-            category = cat_choice
-            break
-            
-        print("  [오류] 올바른 번호나 카테고리명을 입력해 주십시오.")
+    category = select_category(is_edit_mode=False)
+    if category == ":c" or category is None: return
     
     prompts.append({"title": title, "content": content, "category": category, "is_favorite": False, "views": 0})
     print("\n  [알림] 프롬프트 등록이 완료되었습니다.")
@@ -294,7 +417,7 @@ def detail_prompt(prompt_obj):
         print(f" [제목] {prompt_obj['title']}")
         print("-" * 70)
         print(f" [분류] {prompt_obj['category']}")
-        print(f" [조회] {prompt_obj['views']}   [즐겨찾기] {'★ 등록됨' if prompt_obj['is_favorite'] else '☆ 미등록'}")
+        print(f" [조회] {prompt_obj['views']}   [즐겨찾기] {'⭐ 등록됨' if prompt_obj['is_favorite'] else '[ ] 미등록'}")
         print("-" * 70)
         print(" [본문]")
         print(f"{prompt_obj['content']}")
@@ -305,12 +428,32 @@ def detail_prompt(prompt_obj):
         
         if choice == '1':
             print("\n  --- 글 수정 ---")
-            new_title = get_valid_input("  새 제목 (유지하려면 :c) > ")
-            if new_title != ":c": prompt_obj['title'] = new_title
             
-            new_content = get_multiline_input("\n  새 내용 (유지하려면 :c)")
-            if new_content is not None: prompt_obj['content'] = new_content
+            new_title = input(f"  새 제목 [{prompt_obj['title']}] (내용유지: 엔터, 취소: :c) > ").strip()
+            if new_title == ":c":
+                print("  [알림] 수정이 취소되었습니다.")
+                pause_screen()
+                continue
+                
+            new_content = get_multiline_input("\n  새 내용", is_edit_mode=True)
+            if new_content == ":c":
+                print("  [알림] 수정이 취소되었습니다.")
+                pause_screen()
+                continue
+                
+            print(f"\n  현재 카테고리: {prompt_obj['category']}")
+            new_category = select_category(is_edit_mode=True)
+            if new_category == ":c":
+                print("  [알림] 수정이 취소되었습니다.")
+                pause_screen()
+                continue
+            
+            if new_title: prompt_obj['title'] = new_title
+            if new_content: prompt_obj['content'] = new_content
+            if new_category: prompt_obj['category'] = new_category
+            
             print("  [알림] 수정되었습니다.")
+            pause_screen()
             
         elif choice == '2':
             if get_valid_input("  [경고] 정말 삭제하시겠습니까? (Y/N) > ").upper() == 'Y':
@@ -326,6 +469,7 @@ def detail_prompt(prompt_obj):
             return 
         else:
             print("  [오류] 올바른 번호를 입력해주세요")
+            pause_screen()
 
 
 # ==========================================
@@ -386,15 +530,15 @@ def manage_favorite_menu():
 # ==========================================
 def show_main_menu():
     print("=" * 50)
-    print(pad_string("★ 프롬프트 관리 시스템 v1.0 ★", 50, '^'))
+    print(pad_string("⭐ 프롬프트 관리 시스템 v1.1 ⭐", 50, '^'))
     print("=" * 50)
     print("  [ 게시판 관리 ]")
     print("    1. 프롬프트 게시판")
     print("    2. 카테고리 분류함")
     print("    3. 즐겨찾기 보관함")
     print("  [ 자료실 ]")
-    print("    S. 데이터 저장")
-    print("    L. 데이터 불러오기")
+    print("    S. 데이터 저장 (JSON)")
+    print("    L. 데이터 불러오기 (JSON)")
     print("    E. 외부로 내보내기 (Markdown)")
     print("-" * 50)
     print("    0. 종료")
